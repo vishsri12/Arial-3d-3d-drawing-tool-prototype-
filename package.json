@@ -1,0 +1,13 @@
+{
+  "name": "aetherpen-3d",
+  "version": "1.0.0",
+  "description": "A responsive 3D Aerial Pen web application powered by MediaPipe hand gestures.",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.11"
+  }
+}

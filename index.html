@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AetherPen 3D: A responsive web-based 3D Aerial Pen application using MediaPipe hand gestures.">
+  <title>AetherPen 3D - Hand Gesture Drawing Studio</title>
+  
+  <!-- Google Fonts for premium typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe CDN scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-card: rgba(16, 20, 30, 0.65);
+      --bg-input: rgba(255, 255, 255, 0.05);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(0, 242, 254, 0.15);
+      
+      /* Neon Accent Colors */
+      --neon-cyan: #00f2fe;
+      --neon-cyan-glow: rgba(0, 242, 254, 0.4);
+      --neon-pink: #ff007f;
+      --neon-pink-glow: rgba(255, 0, 127, 0.4);
+      --neon-green: #39ff14;
+      --neon-green-glow: rgba(57, 255, 20, 0.4);
+      --neon-violet: #8a2be2;
+      --neon-violet-glow: rgba(138, 43, 226, 0.4);
+      --neon-yellow: #ffdf00;
+      --neon-yellow-glow: rgba(255, 223, 0, 0.4);
+      --neon-orange: #ff9f43;
+      --neon-orange-glow: rgba(255, 159, 67, 0.4);
+      
+      /* Typography & States */
+      --text-main: #f5f6fa;
+      --text-muted: #8b9bb4;
+      --font-display: 'Outfit', sans-serif;
+      --font-mono: 'Share Tech Mono', monospace;
+      
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      /* Grid background + Radial gradient glow */
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(0, 242, 254, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(255, 0, 127, 0.04) 0%, transparent 40%),
+        linear-gradient(rgba(255, 255, 255, 0.005) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.005) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    }
+
+    header {
+      padding: 18px 24px;
+      background: rgba(7, 9, 14, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+      color: #05070a;
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(90deg, #ffffff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+      font-size: 0.8rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--neon-pink);
+      box-shadow: 0 0 8px var(--neon-pink-glow);
+    }
+
+    .app-container {
+      max-width: 1560px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 310px 1fr 310px;
+      gap: 24px;
+      flex-grow: 1;
+    }
+
+    @media (max-width: 1280px) {
+      .app-container {
+        grid-template-columns: 280px 1fr;
+      }
+      .telemetry-panel {
+        grid-column: span 2;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .app-container {
+        grid-template-columns: 1fr;
+        padding: 16px;
+      }
+      .control-panel, .telemetry-panel {
+        grid-column: span 1;
+      }
+    }
+
+    /* Common Card Styling */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Left Sidebar: Control Panel */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .control-label span.val-display {
+      font-family: var(--font-mono);
+      color: var(--neon-cyan);
+      font-weight: 600;
+    }
+
+    /* Color Swatch Selector */
+    .swatches-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .swatch {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      position: relative;
+      transition: var(--transition);
+    }
+
+    .swatch:hover {
+      transform: scale(1.15);
+    }
+
+    .swatch.active {
+      border-color: #ffffff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+    }
+
+    .swatch::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #000;
+      opacity: 0;
+      transition: var(--transition);
+    }
+
+    .swatch.active::after {
+      opacity: 0.3;
+    }
+
+    /* Swatch Colors */
+    .swatch-cyan { background-color: var(--neon-cyan); box-shadow: 0 0 8px rgba(0, 242, 254, 0.3); }
+    .swatch-pink { background-color: var(--neon-pink); box-shadow: 0 0 8px rgba(255, 0, 127, 0.3); }
+    .swatch-green { background-color: var(--neon-green); box-shadow: 0 0 8px rgba(57, 255, 20, 0.3); }
+    .swatch-yellow { background-color: var(--neon-yellow); box-shadow: 0 0 8px rgba(255, 223, 0, 0.3); }
+    .swatch-orange { background-color: var(--neon-orange); box-shadow: 0 0 8px rgba(255, 159, 67, 0.3); }
+    .swatch-white { background-color: #ffffff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.3); }
+
+    /* Custom Color Picker Swatch Container */
+    .custom-color-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-input);
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      margin-top: 4px;
+    }
+
+    .custom-color-label {
+      font-size: 0.85rem;
+      color: var(--text-main);
+    }
+
+    #customColorPicker {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 32px;
+      height: 32px;
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      border-radius: 50%;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    #customColorPicker::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    #customColorPicker::-webkit-color-swatch {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+    }
+
+    /* Range Sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      outline: none;
+      margin: 12px 0;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--neon-cyan);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--neon-cyan-glow);
+      transition: transform 0.1s ease;
+      border: 1px solid #ffffff;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* Interactive Live Brush Preview */
+    .preview-container {
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    #brushPreview {
+      border-radius: 50%;
+      background: var(--neon-cyan);
+      box-shadow: 0 0 15px var(--neon-cyan-glow);
+      transition: width 0.1s, height 0.1s, background-color 0.1s;
+    }
+
+    /* Custom Toggles */
+    .toggle-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-input);
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    .toggle-text {
+      font-size: 0.85rem;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider-round {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.08);
+      transition: .3s;
+      border-radius: 24px;
+      border: 1px solid var(--border-color);
+    }
+
+    .slider-round:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-main);
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider-round {
+      background-color: var(--neon-cyan);
+      box-shadow: 0 0 8px var(--neon-cyan-glow);
+    }
+
+    input:checked + .slider-round:before {
+      transform: translateX(20px);
+      background-color: #07090e;
+    }
+
+    /* Buttons */
+    .btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: var(--transition);
+      width: 100%;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-danger {
+      border-color: rgba(255, 0, 127, 0.25);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(255, 0, 127, 0.1);
+      border-color: var(--neon-pink);
+      box-shadow: 0 0 15px var(--neon-pink-glow);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--neon-cyan), #00a8ff);
+      color: #07090e;
+      border: none;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #00f2fe, #00c0ff);
+      box-shadow: 0 0 15px var(--neon-cyan-glow);
+    }
+
+    /* Middle Viewport Area */
+    .viewport-card {
+      position: relative;
+      background: rgba(16, 20, 30, 0.45);
+      min-height: 480px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .viewport-titlebar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 4px;
+    }
+
+    .viewport-container {
+      width: 100%;
+      aspect-ratio: 4/3;
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background-color: #000000;
+      box-shadow: 
+        inset 0 0 40px rgba(0, 0, 0, 0.9),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .viewport-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror camera feed */
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .viewport-container canvas {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: scaleX(-1); /* Mirror canvas to align perfectly with mirrored video */
+      pointer-events: none;
+    }
+
+    /* HUD overlay on camera viewport */
+    .hud-overlay {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 5;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .hud-item {
+      background: rgba(7, 9, 14, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .hud-label {
+      color: var(--text-muted);
+    }
+
+    .hud-value {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .mode-draw {
+      color: var(--neon-cyan);
+      text-shadow: 0 0 8px var(--neon-cyan-glow);
+    }
+
+    .mode-erase {
+      color: var(--neon-pink);
+      text-shadow: 0 0 8px var(--neon-pink-glow);
+    }
+
+    .mode-hover {
+      color: var(--neon-violet);
+      text-shadow: 0 0 8px var(--neon-violet-glow);
+    }
+
+    .mode-none {
+      color: var(--text-muted);
+    }
+
+    /* Webcam Access Overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(7, 9, 14, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: opacity 0.5s ease;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(0, 242, 254, 0.1);
+      border-top-color: var(--neon-cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      box-shadow: 0 0 15px var(--neon-cyan-glow);
+      margin-bottom: 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-overlay p {
+      font-size: 1rem;
+      max-width: 400px;
+      line-height: 1.5;
+    }
+
+    /* Right Sidebar: Telemetry Panel */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .telemetry-item {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .telemetry-title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .telemetry-value {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    /* Gesture Recognition Visual Guide */
+    .gesture-guide {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .guide-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.01);
+      transition: var(--transition);
+    }
+
+    .guide-item.active-draw {
+      background: rgba(0, 242, 254, 0.08);
+      border-color: rgba(0, 242, 254, 0.25);
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.08);
+    }
+
+    .guide-item.active-erase {
+      background: rgba(255, 0, 127, 0.08);
+      border-color: rgba(255, 0, 127, 0.25);
+      box-shadow: 0 0 12px rgba(255, 0, 127, 0.08);
+    }
+
+    .guide-item.active-hover {
+      background: rgba(138, 43, 226, 0.08);
+      border-color: rgba(138, 43, 226, 0.25);
+      box-shadow: 0 0 12px rgba(138, 43, 226, 0.08);
+    }
+
+    .guide-icon {
+      font-size: 1.4rem;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      transition: var(--transition);
+    }
+
+    .guide-item.active-draw .guide-icon {
+      background: rgba(0, 242, 254, 0.15);
+      border-color: var(--neon-cyan);
+    }
+
+    .guide-item.active-erase .guide-icon {
+      background: rgba(255, 0, 127, 0.15);
+      border-color: var(--neon-pink);
+    }
+
+    .guide-item.active-hover .guide-icon {
+      background: rgba(138, 43, 226, 0.15);
+      border-color: var(--neon-violet);
+    }
+
+    .guide-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .guide-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .guide-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    footer {
+      padding: 16px 24px;
+      background: rgba(7, 9, 14, 0.6);
+      border-top: 1px solid var(--border-color);
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: auto;
+    }
+
+    footer a {
+      color: var(--neon-cyan);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-logo">A</div>
+      <h1>AetherPen 3D</h1>
+    </div>
+    <div class="status-badge">
+      <div id="cameraStatusIndicator" class="status-dot"></div>
+      <span id="cameraStatusText">Connecting Webcam...</span>
+    </div>
+  </header>
+
+  <main class="app-container">
+    
+    <!-- LEFT SIDEBAR: Controls -->
+    <section class="card control-panel" aria-label="Controls">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        Studio Controls
+      </h2>
+
+      <!-- Swatches -->
+      <div class="control-group">
+        <label class="control-label">Pen Color</label>
+        <div class="swatches-grid">
+          <button class="swatch swatch-cyan active" data-color="#00f2fe" aria-label="Cyan Color"></button>
+          <button class="swatch swatch-pink" data-color="#ff007f" aria-label="Pink Color"></button>
+          <button class="swatch swatch-green" data-color="#39ff14" aria-label="Green Color"></button>
+          <button class="swatch swatch-yellow" data-color="#ffdf00" aria-label="Yellow Color"></button>
+          <button class="swatch swatch-orange" data-color="#ff9f43" aria-label="Orange Color"></button>
+          <button class="swatch swatch-white" data-color="#ffffff" aria-label="White Color"></button>
+        </div>
+        <div class="custom-color-container">
+          <input type="color" id="customColorPicker" value="#00f2fe" aria-label="Custom Color Picker">
+          <span class="custom-color-label">Custom Palette Color</span>
+        </div>
+      </div>
+
+      <!-- Brush Size -->
+      <div class="control-group">
+        <label for="brushSize" class="control-label">
+          Brush Thickness
+          <span id="brushSizeVal" class="val-display">8px</span>
+        </label>
+        <input type="range" id="brushSize" min="2" max="60" value="8">
+        <div class="preview-container">
+          <div id="brushPreview"></div>
+        </div>
+      </div>
+
+      <!-- Eraser Size -->
+      <div class="control-group">
+        <label for="eraserSize" class="control-label">
+          Eraser Diameter
+          <span id="eraserSizeVal" class="val-display">40px</span>
+        </label>
+        <input type="range" id="eraserSize" min="15" max="150" value="40">
+      </div>
+
+      <!-- Toggles -->
+      <div class="control-group" style="gap: 12px;">
+        <div class="toggle-container">
+          <span class="toggle-label">Show Hand Skeleton</span>
+          <label class="switch">
+            <input type="checkbox" id="toggleSkeleton" checked>
+            <span class="slider-round"></span>
+          </label>
+        </div>
+
+        <div class="toggle-container">
+          <span class="toggle-label">Movement Smoothing</span>
+          <label class="switch">
+            <input type="checkbox" id="toggleSmoothing" checked>
+            <span class="slider-round"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="control-group" style="margin-top: auto; padding-top: 10px;">
+        <div class="btn-group">
+          <button id="btnUndo" class="btn" disabled aria-label="Undo last action">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+            Undo
+          </button>
+          <button id="btnRedo" class="btn" disabled aria-label="Redo last action">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+            Redo
+          </button>
+        </div>
+        <button id="btnClear" class="btn btn-danger" aria-label="Clear Canvas">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          Clear Canvas
+        </button>
+        <button id="btnSave" class="btn btn-primary" style="margin-top: 5px;" aria-label="Export drawing as PNG">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save Artwork (PNG)
+        </button>
+      </div>
+
+    </section>
+
+    <!-- CENTER VIEWPORT: Video & Canvas Overlay -->
+    <section class="card viewport-card" aria-label="AetherPen Canvas Viewport">
+      
+      <div class="viewport-titlebar">
+        <span style="font-size: 0.85rem; font-weight: 500; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+          <span style="width: 6px; height: 6px; background-color: var(--neon-cyan); border-radius: 50%; animation: pulse 1.5s infinite;"></span>
+          Viewport Live
+        </span>
+        <span id="canvasStatsDisplay" style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">
+          RES: 0x0
+        </span>
+      </div>
+
+      <div class="viewport-container" id="viewportContainer">
+        <!-- Webcam Stream -->
+        <video id="webcam" autoplay playsinline muted></video>
+        
+        <!-- Persistent Painting Canvas -->
+        <canvas id="paintCanvas"></canvas>
+        
+        <!-- Transient Cursor/Skeleton Overlay Canvas -->
+        <canvas id="cursorCanvas"></canvas>
+
+        <!-- Viewport HUD Overlay -->
+        <div class="hud-overlay">
+          <div class="hud-item">
+            <span class="hud-label">MODE:</span>
+            <span id="hudMode" class="hud-value mode-none">DISCONNECTED</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">FPS:</span>
+            <span id="hudFps" class="hud-value">0</span>
+          </div>
+        </div>
+
+        <!-- Camera Initialization overlay -->
+        <div id="loadingOverlay" class="loading-overlay">
+          <div class="spinner"></div>
+          <p id="loadingText">Initializing webcam video interface. Please authorize camera permissions in your browser dialog...</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT SIDEBAR: Telemetry / Gesture Guide -->
+    <section class="card telemetry-panel" aria-label="Telemetry and Guide">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        System Telemetry
+      </h2>
+
+      <!-- Telemetry Data -->
+      <div class="telemetry-grid">
+        <div class="telemetry-item">
+          <span class="telemetry-title">Raw Coordinates</span>
+          <span id="telRawCoords" class="telemetry-value">X: --, Y: --</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-title">Smoothed Pixel</span>
+          <span id="telSmoothCoords" class="telemetry-value">X: --, Y: --</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-title">Tracking Confidence</span>
+          <span id="telConfidence" class="telemetry-value">0%</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-title">Artwork Paths Count</span>
+          <span id="telPathCount" class="telemetry-value">0</span>
+        </div>
+      </div>
+
+      <!-- Gesture Guide -->
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+        <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text-muted);">Gesture Controls</h3>
+        <div class="gesture-guide">
+          
+          <div id="guideDraw" class="guide-item">
+            <div class="guide-icon">☝️</div>
+            <div class="guide-info">
+              <span class="guide-title">Draw Mode</span>
+              <span class="guide-desc">Extend index finger. Fold other fingers.</span>
+            </div>
+          </div>
+
+          <div id="guideErase" class="guide-item">
+            <div class="guide-icon">🖐️</div>
+            <div class="guide-info">
+              <span class="guide-title">Eraser Mode</span>
+              <span class="guide-desc">Extend all fingers to clear drawing.</span>
+            </div>
+          </div>
+
+          <div id="guideHover" class="guide-item">
+            <div class="guide-icon">✊</div>
+            <div class="guide-info">
+              <span class="guide-title">Hover / Standby</span>
+              <span class="guide-desc">Fist or neutral gesture tracks hand only.</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer>
+    <p>AetherPen 3D &copy; 2026. Made with HTML5, CSS3, JavaScript and Google MediaPipe.</p>
+  </footer>
+
+  <script type="module">
+    // --- State variables ---
+    let brushColor = '#00f2fe';
+    let brushSize = 8;
+    let eraserSize = 40;
+    let showSkeletonEnabled = true;
+    let smoothEnabled = true;
+
+    const lerpFactor = 0.22; // Lerp smoothing weight
+    let handDetected = false;
+    let currentGesture = 'none'; // 'draw', 'erase', 'hover', 'none'
+    let trackingConfidence = 0;
+    
+    // Smooth points
+    let smoothedCursor = { x: null, y: null };
+    let smoothedPalm = { x: null, y: null };
+    
+    // Unsmoothed target inputs from MediaPipe
+    let targetCursor = { x: 0, y: 0 };
+    let targetPalm = { x: 0, y: 0 };
+
+    // Hand tracking result cache
+    let lastResults = null;
+    
+    // Performance metrics
+    let fps = 0;
+    let frameCount = 0;
+    let lastFPSUpdateTime = performance.now();
+
+    // Drawing state
+    let undoStack = [];
+    let redoStack = [];
+    let currentStroke = null;
+    let wasDrawing = false;
+    let wasErasing = false;
+    let prevSmoothedCursor = null;
+
+    // --- DOM Elements ---
+    const video = document.getElementById('webcam');
+    const paintCanvas = document.getElementById('paintCanvas');
+    const paintCtx = paintCanvas.getContext('2d');
+    const cursorCanvas = document.getElementById('cursorCanvas');
+    const cursorCtx = cursorCanvas.getContext('2d');
+    
+    const brushSizeSlider = document.getElementById('brushSize');
+    const brushSizeVal = document.getElementById('brushSizeVal');
+    const brushPreview = document.getElementById('brushPreview');
+    const eraserSizeSlider = document.getElementById('eraserSize');
+    const eraserSizeVal = document.getElementById('eraserSizeVal');
+    
+    const toggleSkeleton = document.getElementById('toggleSkeleton');
+    const toggleSmoothing = document.getElementById('toggleSmoothing');
+    
+    const btnUndo = document.getElementById('btnUndo');
+    const btnRedo = document.getElementById('btnRedo');
+    const btnClear = document.getElementById('btnClear');
+    const btnSave = document.getElementById('btnSave');
+
+    // --- Setup Hand Skeleton connections topology ---
+    const HAND_CONNECTIONS = [
+      [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+      [0, 5], [5, 6], [6, 7], [7, 8], // Index
+      [5, 9], [9, 10], [10, 11], [11, 12], // Middle & MCP connectors
+      [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+      [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+      [0, 17] // Palm wrap
+    ];
+
+    // --- Initialize Controls ---
+    function initControls() {
+      // Swatch Click Selection
+      document.querySelectorAll('.swatch').forEach(swatch => {
+        swatch.addEventListener('click', (e) => {
+          const color = e.target.getAttribute('data-color');
+          setBrushColor(color, e.target);
+        });
+      });
+
+      // Custom Color Picker
+      const customPicker = document.getElementById('customColorPicker');
+      customPicker.addEventListener('input', (e) => {
+        setBrushColor(e.target.value, null);
+      });
+
+      // Sliders
+      brushSizeSlider.addEventListener('input', (e) => {
+        brushSize = parseInt(e.target.value);
+        brushSizeVal.innerText = brushSize + 'px';
+        updateBrushPreview();
+      });
+
+      eraserSizeSlider.addEventListener('input', (e) => {
+        eraserSize = parseInt(e.target.value);
+        eraserSizeVal.innerText = eraserSize + 'px';
+      });
+
+      // Toggles
+      toggleSkeleton.addEventListener('change', (e) => {
+        showSkeletonEnabled = e.target.checked;
+      });
+
+      toggleSmoothing.addEventListener('change', (e) => {
+        smoothEnabled = e.target.checked;
+      });
+
+      // Action Buttons
+      btnUndo.addEventListener('click', undo);
+      btnRedo.addEventListener('click', redo);
+      btnClear.addEventListener('click', clearCanvas);
+      btnSave.addEventListener('click', downloadDrawing);
+      
+      // Initialize previews
+      updateBrushPreview();
+    }
+
+    function setBrushColor(color, element) {
+      brushColor = color;
+      
+      // Update UI selection outline
+      document.querySelectorAll('.swatch').forEach(sw => sw.classList.remove('active'));
+      if (element) {
+        element.classList.add('active');
+      }
+      
+      // Keep picker in sync
+      document.getElementById('customColorPicker').value = color;
+      updateBrushPreview();
+    }
+
+    function updateBrushPreview() {
+      brushPreview.style.width = brushSize + 'px';
+      brushPreview.style.height = brushSize + 'px';
+      brushPreview.style.backgroundColor = brushColor;
+      brushPreview.style.boxShadow = `0 0 15px ${brushColor}`;
+    }
+
+    // --- MediaPipe Callback ---
+    function onHandResults(results) {
+      lastResults = results;
+      
+      // Update FPS counts
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFPSUpdateTime >= 1000) {
+        fps = Math.round((frameCount * 1000) / (now - lastFPSUpdateTime));
+        frameCount = 0;
+        lastFPSUpdateTime = now;
+      }
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        handDetected = true;
+        trackingConfidence = results.multiHandedness[0].score;
+        
+        const landmarks = results.multiHandLandmarks[0];
+        
+        // Grab tip & pip joints for gesture classification
+        const wrist = landmarks[0];
+        const indexTip = landmarks[8];
+        const indexPip = landmarks[6];
+        const middleTip = landmarks[12];
+        const middlePip = landmarks[10];
+        const ringTip = landmarks[16];
+        const ringPip = landmarks[14];
+        const pinkyTip = landmarks[20];
+        const pinkyPip = landmarks[18];
+
+        // Determine if fingers are extended (tip Y coordinate is less than PIP Y coordinate)
+        const indexUp = indexTip.y < indexPip.y;
+        const middleUp = middleTip.y < middlePip.y;
+        const ringUp = ringTip.y < ringPip.y;
+        const pinkyUp = pinkyTip.y < pinkyPip.y;
+
+        const w = paintCanvas.width;
+        const h = paintCanvas.height;
+
+        // Target coordinates in absolute pixels (unmirrored horizontally relative to raw feed)
+        targetCursor.x = indexTip.x * w;
+        targetCursor.y = indexTip.y * h;
+
+        // Palm center: Average of knuckles (MCPs: 5, 9, 13, 17) and wrist (0)
+        targetPalm.x = (wrist.x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5 * w;
+        targetPalm.y = (wrist.y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5 * h;
+
+        // --- Gesture Classification ---
+        // 1. Drawing Mode: Only index finger up
+        if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+          currentGesture = 'draw';
+        }
+        // 2. Erasing Mode: All four fingers up
+        else if (indexUp && middleUp && ringUp && pinkyUp) {
+          currentGesture = 'erase';
+        }
+        // 3. Hover Mode: Fist or other neutral gestures
+        else {
+          currentGesture = 'hover';
+        }
+      } else {
+        handDetected = false;
+        currentGesture = 'none';
+        trackingConfidence = 0;
+      }
+    }
+
+    // --- Interactive Undo/Redo Engine ---
+    function pushStrokeToUndo() {
+      if (currentStroke && currentStroke.points && currentStroke.points.length > 0) {
+        undoStack.push(currentStroke);
+        redoStack = []; // reset redo stack on new action
+        currentStroke = null;
+        updateUndoRedoUI();
+      }
+    }
+
+    function undo() {
+      if (undoStack.length > 0) {
+        const stroke = undoStack.pop();
+        redoStack.push(stroke);
+        drawAllStrokes();
+        updateUndoRedoUI();
+      }
+    }
+
+    function redo() {
+      if (redoStack.length > 0) {
+        const stroke = redoStack.pop();
+        undoStack.push(stroke);
+        drawAllStrokes();
+        updateUndoRedoUI();
+      }
+    }
+
+    function clearCanvas() {
+      if (confirm("Are you sure you want to clear your current drawing?")) {
+        undoStack = [];
+        redoStack = [];
+        currentStroke = null;
+        paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+        updateUndoRedoUI();
+      }
+    }
+
+    function updateUndoRedoUI() {
+      btnUndo.disabled = undoStack.length === 0;
+      btnRedo.disabled = redoStack.length === 0;
+      document.getElementById('telPathCount').innerText = undoStack.length;
+    }
+
+    // Redraws everything in the undo stack (used after undo/redo/resizing)
+    function drawAllStrokes() {
+      paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+      
+      for (const stroke of undoStack) {
+        if (stroke.type === 'draw') {
+          paintCtx.beginPath();
+          paintCtx.strokeStyle = stroke.color;
+          paintCtx.lineWidth = stroke.size;
+          paintCtx.lineCap = 'round';
+          paintCtx.lineJoin = 'round';
+          
+          if (stroke.points.length > 0) {
+            paintCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+              paintCtx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+            paintCtx.stroke();
+          }
+        } else if (stroke.type === 'erase') {
+          paintCtx.save();
+          paintCtx.globalCompositeOperation = 'destination-out';
+          paintCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+          for (const pt of stroke.points) {
+            paintCtx.beginPath();
+            paintCtx.arc(pt.x, pt.y, stroke.size, 0, Math.PI * 2);
+            paintCtx.fill();
+          }
+          paintCtx.restore();
+        }
+      }
+    }
+
+    // --- Vector Custom Skeleton Renderer ---
+    function drawSkeleton(ctx, landmarks) {
+      const w = cursorCanvas.width;
+      const h = cursorCanvas.height;
+
+      // 1. Draw Connectors
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0, 242, 254, 0.4)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(0, 242, 254, 0.6)';
+      ctx.shadowBlur = 6;
+      
+      for (const edge of HAND_CONNECTIONS) {
+        const pt1 = landmarks[edge[0]];
+        const pt2 = landmarks[edge[1]];
+        
+        ctx.beginPath();
+        ctx.moveTo(pt1.x * w, pt1.y * h);
+        ctx.lineTo(pt2.x * w, pt2.y * h);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 2. Draw Landmark Joints
+      ctx.save();
+      for (let i = 0; i < landmarks.length; i++) {
+        const pt = landmarks[i];
+        const cx = pt.x * w;
+        const cy = pt.y * h;
+
+        if (i === 8) { // Index Tip: Active drawing pointer node
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = varColor('--neon-cyan');
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else if (i === 4 || i === 12 || i === 16 || i === 20) { // Other Tips
+          ctx.fillStyle = varColor('--neon-pink');
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+        } else { // Normal knuckles
+          ctx.fillStyle = 'rgba(245, 246, 250, 0.85)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Helper to extract computed CSS variables as hex
+    function varColor(cssVar) {
+      return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+    }
+
+    // --- 60FPS Decoupled Rendering & Smoothing Loop ---
+    function runRenderLoop() {
+      // 1. Apply Coordinate Smoothing / Logic Processing
+      if (handDetected) {
+        const factor = smoothEnabled ? lerpFactor : 1.0;
+        
+        // Pointer tip smoothing
+        if (smoothedCursor.x === null) {
+          smoothedCursor.x = targetCursor.x;
+          smoothedCursor.y = targetCursor.y;
+        } else {
+          smoothedCursor.x += (targetCursor.x - smoothedCursor.x) * factor;
+          smoothedCursor.y += (targetCursor.y - smoothedCursor.y) * factor;
+        }
+
+        // Palm center smoothing
+        if (smoothedPalm.x === null) {
+          smoothedPalm.x = targetPalm.x;
+          smoothedPalm.y = targetPalm.y;
+        } else {
+          smoothedPalm.x += (targetPalm.x - smoothedPalm.x) * factor;
+          smoothedPalm.y += (targetPalm.y - smoothedPalm.y) * factor;
+        }
+
+        // Update Diagnostics UI
+        document.getElementById('telRawCoords').innerText = `X: ${targetCursor.x.toFixed(0)}, Y: ${targetCursor.y.toFixed(0)}`;
+        document.getElementById('telSmoothCoords').innerText = `X: ${smoothedCursor.x.toFixed(0)}, Y: ${smoothedCursor.y.toFixed(0)}`;
+        document.getElementById('telConfidence').innerText = Math.round(trackingConfidence * 100) + '%';
+
+        // --- Execute Actions on paintCanvas ---
+        if (currentGesture === 'draw') {
+          if (!wasDrawing) {
+            // Push active eraser stroke if transitioning directly
+            if (wasErasing) {
+              pushStrokeToUndo();
+              wasErasing = false;
+            }
+            // Initialize new vector drawing stroke
+            currentStroke = {
+              type: 'draw',
+              color: brushColor,
+              size: brushSize,
+              points: [{ x: smoothedCursor.x, y: smoothedCursor.y }]
+            };
+            prevSmoothedCursor = { x: smoothedCursor.x, y: smoothedCursor.y };
+            wasDrawing = true;
+          } else {
+            // Add segment & draw vector onto canvas
+            paintCtx.beginPath();
+            paintCtx.moveTo(prevSmoothedCursor.x, prevSmoothedCursor.y);
+            paintCtx.lineTo(smoothedCursor.x, smoothedCursor.y);
+            paintCtx.strokeStyle = brushColor;
+            paintCtx.lineWidth = brushSize;
+            paintCtx.lineCap = 'round';
+            paintCtx.lineJoin = 'round';
+            paintCtx.stroke();
+
+            currentStroke.points.push({ x: smoothedCursor.x, y: smoothedCursor.y });
+            prevSmoothedCursor = { x: smoothedCursor.x, y: smoothedCursor.y };
+          }
+        } 
+        else if (currentGesture === 'erase') {
+          if (!wasErasing) {
+            // Push active draw stroke if transitioning directly
+            if (wasDrawing) {
+              pushStrokeToUndo();
+              wasDrawing = false;
+              prevSmoothedCursor = null;
+            }
+            // Initialize new eraser stroke
+            currentStroke = {
+              type: 'erase',
+              size: eraserSize,
+              points: [{ x: smoothedPalm.x, y: smoothedPalm.y }]
+            };
+            wasErasing = true;
+          } else {
+            // Apply canvas erasure
+            paintCtx.save();
+            paintCtx.globalCompositeOperation = 'destination-out';
+            paintCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+            paintCtx.beginPath();
+            paintCtx.arc(smoothedPalm.x, smoothedPalm.y, eraserSize, 0, Math.PI * 2);
+            paintCtx.fill();
+            paintCtx.restore();
+
+            currentStroke.points.push({ x: smoothedPalm.x, y: smoothedPalm.y });
+          }
+        } 
+        else {
+          // In neutral hover state: finalize any previous active stroke
+          if (wasDrawing) {
+            pushStrokeToUndo();
+            wasDrawing = false;
+            prevSmoothedCursor = null;
+          }
+          if (wasErasing) {
+            pushStrokeToUndo();
+            wasErasing = false;
+          }
+        }
+      } else {
+        // No hand detected: finalize active paths and reset smoothing
+        if (wasDrawing) {
+          pushStrokeToUndo();
+          wasDrawing = false;
+          prevSmoothedCursor = null;
+        }
+        if (wasErasing) {
+          pushStrokeToUndo();
+          wasErasing = false;
+        }
+
+        smoothedCursor = { x: null, y: null };
+        smoothedPalm = { x: null, y: null };
+
+        document.getElementById('telRawCoords').innerText = 'X: --, Y: --';
+        document.getElementById('telSmoothCoords').innerText = 'X: --, Y: --';
+        document.getElementById('telConfidence').innerText = '0%';
+      }
+
+      // 2. Draw overlay visual cues (cursorCanvas)
+      cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+      
+      if (handDetected) {
+        // Draw skeleton connectors & nodes
+        if (showSkeletonEnabled && lastResults) {
+          drawSkeleton(cursorCtx, lastResults.multiHandLandmarks[0]);
+        }
+
+        // Draw gesture pointer indicators
+        if (currentGesture === 'draw' && smoothedCursor.x !== null) {
+          // Cyber drawing pointer
+          cursorCtx.save();
+          cursorCtx.shadowColor = brushColor;
+          cursorCtx.shadowBlur = 10;
+          cursorCtx.fillStyle = brushColor;
+          cursorCtx.beginPath();
+          cursorCtx.arc(smoothedCursor.x, smoothedCursor.y, brushSize / 2, 0, Math.PI * 2);
+          cursorCtx.fill();
+          
+          cursorCtx.shadowBlur = 0;
+          cursorCtx.strokeStyle = '#ffffff';
+          cursorCtx.lineWidth = 1.5;
+          cursorCtx.beginPath();
+          cursorCtx.arc(smoothedCursor.x, smoothedCursor.y, brushSize / 2 + 2, 0, Math.PI * 2);
+          cursorCtx.stroke();
+          cursorCtx.restore();
+        } 
+        else if (currentGesture === 'erase' && smoothedPalm.x !== null) {
+          // Translucent Red Eraser Ring
+          cursorCtx.save();
+          cursorCtx.fillStyle = 'rgba(255, 0, 127, 0.15)';
+          cursorCtx.strokeStyle = varColor('--neon-pink');
+          cursorCtx.lineWidth = 2;
+          cursorCtx.setLineDash([6, 4]);
+          cursorCtx.beginPath();
+          cursorCtx.arc(smoothedPalm.x, smoothedPalm.y, eraserSize, 0, Math.PI * 2);
+          cursorCtx.fill();
+          cursorCtx.stroke();
+
+          // Reticle Crosshair
+          cursorCtx.beginPath();
+          cursorCtx.moveTo(smoothedPalm.x - 10, smoothedPalm.y);
+          cursorCtx.lineTo(smoothedPalm.x + 10, smoothedPalm.y);
+          cursorCtx.moveTo(smoothedPalm.x, smoothedPalm.y - 10);
+          cursorCtx.lineTo(smoothedPalm.x, smoothedPalm.y + 10);
+          cursorCtx.strokeStyle = varColor('--neon-pink');
+          cursorCtx.lineWidth = 1.5;
+          cursorCtx.setLineDash([]);
+          cursorCtx.stroke();
+          cursorCtx.restore();
+        } 
+        else if (currentGesture === 'hover' && smoothedCursor.x !== null) {
+          // Neutral Hover Target Ring
+          cursorCtx.save();
+          cursorCtx.fillStyle = 'rgba(138, 43, 226, 0.2)';
+          cursorCtx.strokeStyle = varColor('--neon-violet');
+          cursorCtx.lineWidth = 1.5;
+          cursorCtx.beginPath();
+          cursorCtx.arc(smoothedCursor.x, smoothedCursor.y, 7, 0, Math.PI * 2);
+          cursorCtx.fill();
+          cursorCtx.stroke();
+          cursorCtx.restore();
+        }
+      }
+
+      // 3. Update HUD overlays and Status UI
+      updateStatusUI();
+
+      requestAnimationFrame(runRenderLoop);
+    }
+
+    function updateStatusUI() {
+      const hudMode = document.getElementById('hudMode');
+      const hudFps = document.getElementById('hudFps');
+      const guideDraw = document.getElementById('guideDraw');
+      const guideErase = document.getElementById('guideErase');
+      const guideHover = document.getElementById('guideHover');
+      
+      // Clear active style guide blocks
+      guideDraw.className = 'guide-item';
+      guideErase.className = 'guide-item';
+      guideHover.className = 'guide-item';
+      hudMode.className = 'hud-value';
+
+      if (handDetected) {
+        if (currentGesture === 'draw') {
+          hudMode.innerText = 'WRITING';
+          hudMode.classList.add('mode-draw');
+          guideDraw.classList.add('active-draw');
+        } else if (currentGesture === 'erase') {
+          hudMode.innerText = 'ERASING';
+          hudMode.classList.add('mode-erase');
+          guideErase.classList.add('active-erase');
+        } else {
+          hudMode.innerText = 'HOVERING';
+          hudMode.classList.add('mode-hover');
+          guideHover.classList.add('active-hover');
+        }
+      } else {
+        hudMode.innerText = 'DISCONNECTED';
+        hudMode.classList.add('mode-none');
+      }
+
+      hudFps.innerText = fps;
+    }
+
+    // --- Save/Download Artwork Image ---
+    function downloadDrawing() {
+      // 1. Create a workspace canvas matching dimensions
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = paintCanvas.width;
+      exportCanvas.height = paintCanvas.height;
+      const exportCtx = exportCanvas.getContext('2d');
+
+      // 2. Draw cyber space dark gradient background
+      const gradient = exportCtx.createRadialGradient(
+        exportCanvas.width / 2, exportCanvas.height / 2, 20,
+        exportCanvas.width / 2, exportCanvas.height / 2, exportCanvas.width / 1.2
+      );
+      gradient.addColorStop(0, '#10141e');
+      gradient.addColorStop(1, '#07090e');
+      exportCtx.fillStyle = gradient;
+      exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+      // 3. Draw a structural cyberpunk design grid
+      exportCtx.strokeStyle = 'rgba(255, 255, 255, 0.012)';
+      exportCtx.lineWidth = 1;
+      const gridSize = 40;
+      for (let x = 0; x < exportCanvas.width; x += gridSize) {
+        exportCtx.beginPath();
+        exportCtx.moveTo(x, 0);
+        exportCtx.lineTo(x, exportCanvas.height);
+        exportCtx.stroke();
+      }
+      for (let y = 0; y < exportCanvas.height; y += gridSize) {
+        exportCtx.beginPath();
+        exportCtx.moveTo(0, y);
+        exportCtx.lineTo(exportCanvas.width, y);
+        exportCtx.stroke();
+      }
+
+      // 4. Mirror & render painting so it reads exactly as drawn on screen
+      exportCtx.save();
+      exportCtx.translate(exportCanvas.width, 0);
+      exportCtx.scale(-1, 1);
+      exportCtx.drawImage(paintCanvas, 0, 0);
+      exportCtx.restore();
+
+      // 5. Download trigger
+      const downloadLink = document.createElement('a');
+      downloadLink.download = 'aetherpen-artwork.png';
+      downloadLink.href = exportCanvas.toDataURL('image/png');
+      downloadLink.click();
+    }
+
+    // --- Camera Initializer ---
+    async function setupCamera() {
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      const loadingText = document.getElementById('loadingText');
+      const cameraStatusIndicator = document.getElementById('cameraStatusIndicator');
+      const cameraStatusText = document.getElementById('cameraStatusText');
+
+      try {
+        // First test navigator API availability
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Insecure origin or unsupported browser. Navigator mediaDevice interface is unavailable.');
+        }
+
+        // Test webcam stream access & resolve permissions dialog
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: false
+        });
+        
+        // Release video hardware lock immediately (we only wanted to test availability)
+        stream.getTracks().forEach(track => track.stop());
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+          }
+        });
+
+        hands.setOptions({
+          maxNumHands: 1, // Focus on single hand tracking for best performance
+          modelComplexity: 1,
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onHandResults);
+
+        // Connect media streams to HTML5 Video element
+        const camera = new Camera(video, {
+          onFrame: async () => {
+            await hands.send({ image: video });
+          },
+          width: 640,
+          height: 480
+        });
+
+        // Resize canvases dynamically when video stream dimensions load
+        video.addEventListener('loadeddata', () => {
+          paintCanvas.width = video.videoWidth;
+          paintCanvas.height = video.videoHeight;
+          cursorCanvas.width = video.videoWidth;
+          cursorCanvas.height = video.videoHeight;
+          
+          document.getElementById('canvasStatsDisplay').innerText = `RES: ${video.videoWidth}x${video.videoHeight}`;
+          drawAllStrokes(); // ensure lines map if resizing happens
+        });
+
+        await camera.start();
+
+        // Successful load styling
+        loadingOverlay.style.opacity = '0';
+        setTimeout(() => {
+          loadingOverlay.style.display = 'none';
+        }, 500);
+
+        cameraStatusIndicator.style.backgroundColor = 'var(--neon-green)';
+        cameraStatusIndicator.style.boxShadow = '0 0 10px var(--neon-green-glow)';
+        cameraStatusText.innerText = 'Camera Feed Connected';
+
+      } catch (err) {
+        console.error('Failed to start video capture stream:', err);
+        
+        // Update error UI
+        const spinner = document.querySelector('.spinner');
+        if (spinner) spinner.style.display = 'none';
+        
+        let errMsg = 'Could not access webcam stream.';
+        if (err.message && err.message.includes('Insecure origin')) {
+          errMsg = 'Insecure context detected. Modern browsers restrict camera access (navigator.mediaDevices.getUserMedia) to secure contexts (HTTPS or localhost). Please open this app via localhost or deploy it onto a secure web server (e.g. GitHub Pages or Netlify).';
+        } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errMsg = 'Camera access was blocked by the user. Please click the camera icon in your address bar, grant permission, and refresh the page.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errMsg = 'No physical webcam hardware detected. Please attach a camera and reload.';
+        } else {
+          errMsg = `Fatal camera init failure: ${err.message || err}`;
+        }
+
+        loadingText.innerHTML = `
+          <span style="color: var(--neon-pink); font-weight: 700; font-size: 1.1rem; display: block; margin-bottom: 12px;">Webcam Connection Failed</span>
+          ${errMsg}<br>
+          <small style="display: block; margin-top: 18px; color: var(--text-muted); font-size: 0.8rem;">
+            Tip: You can easily run a local server by opening this directory in VS Code and starting the "Live Server" extension (runs on <code>http://127.0.0.1</code>).
+          </small>
+        `;
+
+        cameraStatusIndicator.style.backgroundColor = 'var(--neon-pink)';
+        cameraStatusIndicator.style.boxShadow = '0 0 10px var(--neon-pink-glow)';
+        cameraStatusText.innerText = 'Connection Error';
+      }
+    }
+
+    // --- Boot Strap ---
+    window.addEventListener('DOMContentLoaded', () => {
+      initControls();
+      setupCamera();
+      runRenderLoop();
+    });
+
+  </script>
+</body>
+</html>
